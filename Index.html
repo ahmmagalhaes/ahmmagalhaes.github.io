@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<title>Calculadora UTI</title>
+<style>
+:root{--bg:#f4f7f8;--card:#fff;--ink:#12212b;--mut:#5b6b75;--line:#d5dee3;--acc:#0a6b7c;--acc2:#e6f3f5;--red:#b3261e;--amb:#8a5a00;--grn:#1b6b3a}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1a20;--card:#17262e;--ink:#e8f0f3;--mut:#93a5af;--line:#2b3f49;--acc:#4fc3d6;--acc2:#12333b;--red:#ff8a80;--amb:#ffca6b;--grn:#7fdc9f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:14px 16px 0;max-width:980px;margin:auto}
+h1{font-size:1.25rem;margin:0 0 10px}
+.tabs{display:flex;gap:6px}
+.tabs button{flex:1;padding:10px;border:1px solid var(--line);border-bottom:none;border-radius:8px 8px 0 0;background:transparent;color:var(--mut);font:inherit;font-weight:600;cursor:pointer}
+.tabs button[aria-selected=true]{background:var(--card);color:var(--acc)}
+main{max-width:980px;margin:auto;padding:0 16px 24px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:0 0 10px 10px;padding:16px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:1.8fr 1fr;gap:20px}
+@media(max-width:720px){.grid{grid-template-columns:1fr}}
+label{display:block;font-weight:600;margin:12px 0 4px;font-size:.92rem}
+input,select{width:100%;padding:9px;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px}
+:focus-visible{outline:3px solid var(--acc);outline-offset:1px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.seg{display:flex;gap:6px;margin-top:4px}
+.seg button,.btn,.sug button{padding:9px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--acc);border-color:var(--acc);color:var(--card);font-weight:600}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:var(--card);font-weight:600;width:100%;margin-top:14px}
+.sug{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.sug button{font-size:.85rem}
+.res{margin-top:16px;padding:14px;border-left:5px solid var(--acc);background:var(--acc2);border-radius:6px}
+.big{font-size:2.6rem;font-weight:700;color:var(--acc);line-height:1.1}
+.mut{color:var(--mut);font-size:.9rem}
+.info{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;font-size:.95rem}
+.info p{margin:6px 0}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:.82rem;font-weight:600;border:1px solid currentColor}
+.ok{color:var(--grn)}.lo{color:var(--amb)}.hi{color:var(--red)}
+.warn{margin-top:10px;padding:10px;border:1px solid var(--amb);border-radius:6px;color:var(--amb);font-weight:600}
+.err{color:var(--red);font-weight:600}
+.item{border:1px solid var(--line);border-left:5px solid var(--acc);border-radius:8px;padding:12px;margin:10px 0}
+.item h4{margin:0 0 4px;color:var(--acc)}
+.item .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.item input[type=range]{padding:0;margin:8px 0}
+h3{margin:16px 0 4px;font-size:1rem}
+footer{max-width:980px;margin:auto;padding:0 16px 24px;color:var(--mut);font-size:.82rem}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <h1>Calculadora de Infusão Contínua (UTI)</h1>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tRef" aria-selected="true">Referência rápida</button>
+    <button role="tab" id="tPlan" aria-selected="false">Plano terapêutico</button>
+  </div>
+</header>
+<main>
+  <div class="panel">
+    <div id="ficha" hidden>
+      <div class="row">
+        <div><label for="pNome">Nome / identificação</label><input id="pNome" maxlength="60"></div>
+        <div><label for="pIdade">Idade (anos)</label><input id="pIdade" type="number" min="0" max="120"></div>
+        <div><label for="pAlt">Altura (cm)</label><input id="pAlt" type="number" min="10" max="250"></div>
+      </div>
+    </div>
+    <div class="row" style="max-width:260px"><div><label for="peso">Peso (kg)</label><input id="peso" type="number" inputmode="decimal" min="1" max="300" step="0.1" value="70"></div></div>
+  </div>
+
+  <div class="panel grid">
+    <div>
+      <div class="row">
+        <div><label for="cat">Categoria</label><select id="cat"></select></div>
+        <div><label for="drug">Fármaco</label><select id="drug"></select></div>
+      </div>
+      <label>Modo de preparo</label>
+      <div class="seg"><button id="mPad" aria-pressed="true">Padrão</button><button id="mCus" aria-pressed="false">Personalizada</button></div>
+      <div id="dyn"></div>
+      <div class="res">
+        <div class="mut">Vazão na bomba de infusão</div>
+        <div class="big" id="vaz">—</div>
+        <div id="status"></div>
+      </div>
+      <div id="ataqueBox"></div>
+      <button class="btn pri" id="add" hidden>Adicionar ao plano terapêutico</button>
+    </div>
+    <aside class="info" id="side"></aside>
+  </div>
+
+  <div class="panel" id="planPanel" hidden>
+    <div class="top" style="display:flex;justify-content:space-between;align-items:center">
+      <strong>Painel de prescrições</strong>
+      <button class="btn" id="clear">Nova ficha / limpar tudo</button>
+    </div>
+    <p class="mut" id="ident"></p>
+    <div id="plan"></div>
+  </div>
+</main>
+<footer>
+  <p><strong>Aviso clínico:</strong> instrumento de auxílio rápido. Cálculos de drogas de alta vigilância, diluições e programações de bomba devem passar por dupla checagem pelo enfermeiro/médico responsável.</p>
+  <p>Direitos reservados ao criador. Antonio Magalhães — ahmmagalhaes@gmail.com · Base de dados v1 (revisar periodicamente)</p>
+</footer>
+
+<script>
+/* ===== Banco de dados (u=unidade, r=faixa usual, f=fotossensível, s=solvente,
+   ap=apresentação{f forma,m massa,u unidade,v volume mL}, at=dose de ataque{v,u,t min},
+   dil=[nome, concentração na unidade-base do fármaco por mL, descrição]) ===== */
+const DROGAS={
+"Vasoativas e Inotrópicas":{
+"Noradrenalina":{u:"mcg/kg/min",r:[0.05,1],f:0,s:"SG5%",ap:{f:"amp",m:4,u:"mg",v:4},dil:[["Padrão (4 amp)",64,"16mg (4 amp) + 234mL SG5%"],["Dobrada (8 amp)",128,"32mg (8 amp) + 218mL SG5%"],["Quadruplicada (16 amp)",256,"64mg (16 amp) + 186mL SG5%"],["Solução 2 (5 amp)",80,"20mg (5 amp) + 230mL SG5%"],["Solução 1 - Acesso periférico (1 amp)",16,"4mg (1 amp) + 246mL SG5%"]]},
+"Adrenalina":{u:"mcg/kg/min",r:[0.01,1],f:0,s:"SG5%",ap:{f:"amp",m:1,u:"mg",v:1},dil:[["Padrão (10 amp)",50,"10mg (10 amp) + 190mL SG5%"]]},
+"Dobutamina":{u:"mcg/kg/min",r:[2.5,20],f:0,s:"SF0,9% ou SG5%",ap:{f:"amp",m:250,u:"mg",v:20},dil:[["Padrão (1 amp)",1000,"250mg (1 amp) + 230mL SF0,9% ou SG5%"],["Concentrada (2 amp)",2000,"500mg (2 amp) + 210mL SF0,9% ou SG5%"],["Concentrada (4 amp)",4000,"1000mg (4 amp) + 150mL SF0,9% ou SG5%"]]},
+"Dopamina":{u:"mcg/kg/min",r:[5,20],f:0,s:"SF0,9% ou SG5%",ap:{f:"amp",m:50,u:"mg",v:10},dil:[["Padrão (5 amp)",1000,"250mg (5 amp) + 200mL SF0,9% ou SG5%"]]},
+"Milrinona":{u:"mcg/kg/min",r:[0.375,0.75],f:0,s:"SF0,9% ou SG5%",ap:{f:"amp",m:10,u:"mg",v:10},at:{v:50,u:"mcg/kg",t:10},dil:[["Padrão (2 amp)",200,"20mg (2 amp) + 80mL SF0,9% ou SG5%"]]},
+"Levosimendan":{u:"mcg/kg/min",r:[0.05,0.2],f:0,s:"SG5%",ap:{f:"frasco",m:12.5,u:"mg",v:5},at:{v:12,u:"mcg/kg",t:10},dil:[["Padrão (1 frasco)",50,"12.5mg (1 frasco) + 245mL SG5%"]]},
+"Nitroglicerina":{u:"mcg/min",r:[5,200],f:1,s:"SF0,9% ou SG5%",ap:{f:"amp",m:50,u:"mg",v:10},dil:[["Padrão (1 amp)",200,"50mg (1 amp) + 240mL SF0,9% ou SG5%"]]},
+"Nitroprussiato":{u:"mcg/kg/min",r:[0.25,10],f:1,s:"SG5%",ap:{f:"amp",m:50,u:"mg",v:2},dil:[["Padrão (1 amp)",200,"50mg (1 amp) + 248mL SG5%"]]},
+"Vasopressina":{u:"U/min",r:[0.01,0.04],f:0,s:"SF0.9%",ap:{f:"amp",m:20,u:"U",v:1},dil:[["Padrão (1 amp)",0.2,"20U (1 amp) + 99mL SF0.9%"],["Concentrada (2 amp)",0.4,"40U (2 amp) + 98mL SF0.9%"]]},
+"Azul de Metileno":{u:"mg/kg/h",r:[0.25,2],f:0,s:"SG5%",ap:{f:"amp",m:10,u:"mg",v:10},at:{v:2,u:"mg/kg",t:20},dil:[["Padrão (5 amp)",0.5,"50mg (5 amp) + 50mL SG5%"]]}
+},
+"Sedação e Analgesia":{
+"Fentanil":{u:"mcg/kg/h",r:[1,5],f:0,s:"SF0,9% ou SG5%",ap:{f:"amp",m:500,u:"mcg",v:10},dil:[["Padrão (5 amp em 250mL)",10,"2500mcg (5 amp) + 200mL SF0,9% ou SG5%"]]},
+"Midazolam":{u:"mg/kg/h",r:[0.03,0.2],f:0,s:"SF0,9% ou SG5%",ap:{f:"amp",m:50,u:"mg",v:10},dil:[["Padrão (5 amp em 250mL)",1,"250mg (5 amp) + 200mL SF0,9% ou SG5%"]]},
+"Propofol":{u:"mg/kg/h",r:[0.3,4],f:0,s:"Puro",ap:{f:"frasco",m:500,u:"mg",v:50},dil:[["Propofol 1%",10,"Puro (Frasco 1% - 10mg/mL)"],["Propofol 2%",20,"Puro (Frasco 2% - 20mg/mL)"]]},
+"Cetamina":{u:"mg/kg/h",r:[0.05,2.5],f:0,s:"SF0,9% ou SG5%",ap:{f:"frasco",m:500,u:"mg",v:10},dil:[["Padrão (2 frascos em 100mL)",10,"1000mg (2 frascos) + 80mL SF0,9% ou SG5%"]]},
+"Morfina":{u:"mg/h",r:[1,5],f:0,s:"SF0,9% ou SG5%",ap:{f:"amp",m:10,u:"mg",v:1},dil:[["Padrão (5 amp)",1,"50mg (5 amp) + 45mL SF0,9% ou SG5%"]]},
+"Dexmedetomidina":{u:"mcg/kg/h",r:[0.2,1.5],f:0,s:"SF0.9%",ap:{f:"amp",m:200,u:"mcg",v:2},dil:[["Padrão (2 amp)",4,"400mcg (2 amp) + 96mL SF0.9%"]]},
+"Remifentanil":{u:"mcg/kg/min",r:[0.05,0.5],f:0,s:"SF0,9% ou SG5%",ap:{f:"frasco",m:2,u:"mg",v:0},dil:[["Padrão (1 frasco)",50,"2mg (1 frasco) + 40mL SF0,9% ou SG5%"]]}
+},
+"Bloqueadores Neuromusculares":{
+"Rocuronio":{u:"mg/kg/h",r:[0.3,0.6],f:0,s:"Puro",ap:{f:"frasco",m:50,u:"mg",v:5},at:{v:0.6,u:"mg/kg",t:0},dil:[["Puro (10 mg/mL)",10,"Puro (10mg/mL)"],["Diluído 1:1 (5 mg/mL)",5,"1:1 (1 parte de rocurônio + 1 parte de solvente = 5mg/mL)"]]},
+"Atracurio":{u:"mg/kg/h",r:[0.3,0.6],f:0,s:"SF0,9% ou SG5%",ap:{f:"amp",m:50,u:"mg",v:5},dil:[["Padrão (5 amp em 250mL)",1,"250mg (5 amp) + 225mL SF0,9% ou SG5%"]]},
+"Cisatracurio":{u:"mcg/kg/min",r:[0.5,2],f:0,s:"Puro",ap:{f:"amp",m:20,u:"mg",v:10},at:{v:150,u:"mcg/kg",t:0},dil:[["Puro (Frasco)",2000,"Puro (2mg/mL = 2000mcg/mL)"]]}
+},
+"Antiarrítmicos":{
+"Amiodarona":{u:"mg/h",r:[15,30],f:0,s:"SG5%",ap:{f:"amp",m:150,u:"mg",v:3},at:{v:150,u:"mg",t:10},dil:[["Padrão (2 amp)",1.2,"300mg (2 amp) + 240mL SG5%"]]},
+"Lidocaina 2%":{u:"mg/min",r:[1,4],f:0,s:"Puro",ap:{f:"frasco",m:400,u:"mg",v:20},at:{v:1.5,u:"mg/kg",t:0},dil:[["Puro",20,"Puro (Lidocaina 2% = 20mg/mL)"]]}
+}};
+const ORDEM=Object.keys(DROGAS);
+
+/* ===== Utilidades ===== */
+const $=id=>document.getElementById(id);
+const nf=(n,d=1)=>Number(n).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const S={plano:false,cat:ORDEM[0],drug:'',prep:'padrao',dil:0,qtd:1,vs:0,touched:false,dose:0,ataque:false};
+let plan=[],uid=0;
+const peso=()=>{const p=parseFloat($('peso').value);return p>0?p:0};
+const cur=()=>DROGAS[S.cat][S.drug];
+const kgOf=u=>u.includes('kg'), minOf=u=>u.includes('min');
+const baseUnit=u=>u.split('/')[0].toLowerCase();
+const convert=(m,from,to)=>{from=from.toLowerCase();return from===to?m:(from==='mg'&&to==='mcg')?m*1000:(from==='mcg'&&to==='mg')?m/1000:m};
+const status=(dose,r)=>dose<r[0]?['lo','abaixo da faixa usual']:dose<=r[1]?['ok','dentro da faixa usual']:['hi','acima da faixa usual'];
+
+function context(){
+  const d=cur(),mu=baseUnit(d.u);let conc,desc;
+  if(S.prep==='padrao'){const x=d.dil[S.dil];conc=x[1];desc=x[2];}
+  else{const a=d.ap,m=S.qtd*a.m,vf=S.vs+S.qtd*a.v;
+    conc=vf>0?convert(m,a.u,mu)/vf:0;
+    desc=`${nf(m,1)}${a.u} (${S.qtd} ${a.f}${S.qtd>1?'s':''}) + ${nf(S.vs,1)}mL solvente`;}
+  return {d,mu,conc,desc};
+}
+const vazao=(dose,unid,conc)=>conc>0?dose*(kgOf(unid)?peso():1)*(minOf(unid)?60:1)/conc:0;
+
+function ataque(d,conc,mu){
+  if(!d.at)return null;
+  const a=d.at,unit=a.u.toLowerCase();let total,u;
+  if(unit.includes('/kg')){total=a.v*peso();u=unit.split('/')[0];}else{total=a.v;u=unit.trim();}
+  const vol=conc>0?convert(total,u,mu)/conc:0;
+  const quando=a.t>0?`em ${a.t} minutos`:'em bolus direto';
+  return {total,u,vol,txt:`Administrar ${nf(vol,1)} mL ${quando}.`,rec:`${a.v} ${a.u} (dose final: ${nf(total,1)} ${u})`};
+}
+
+/* ===== Calculadora ===== */
+function fillSelects(){
+  $('cat').innerHTML=ORDEM.map(c=>`<option>${esc(c)}</option>`).join('');
+  $('cat').value=S.cat;
+  const nomes=Object.keys(DROGAS[S.cat]).sort((a,b)=>a.localeCompare(b,'pt'));
+  $('drug').innerHTML=nomes.map(n=>`<option>${esc(n)}</option>`).join('');
+  if(!S.drug||!DROGAS[S.cat][S.drug])S.drug=nomes[0];
+  $('drug').value=S.drug;
+}
+function resetDrug(){const d=cur();S.dil=0;S.qtd=1;S.touched=false;S.ataque=false;S.dose=d.r[0];build();}
+
+function build(){
+  const d=cur();let h='';
+  if(S.prep==='padrao'){
+    h+=`<label for="dil">Diluição</label><select id="dil">${d.dil.map((x,i)=>`<option value="${i}">${esc(x[0])}</option>`).join('')}</select>`;
+  }else{
+    h+=`<label for="qtd">Quantidade de ${esc(d.ap.f)}s</label><input id="qtd" type="number" min="1" max="100" step="1" value="${S.qtd}">
+        <label>Sugestões de volume de solvente</label><div class="sug" id="sug"></div>
+        <label for="vs">Volume de solvente adicionado (mL)</label><input id="vs" type="number" min="0" max="2000" step="1" value="${S.vs}">`;
+  }
+  h+=`<label for="dose">Dose de manutenção desejada (${esc(d.u)})</label><input id="dose" type="number" inputmode="decimal" min="0" step="any" value="${S.dose}">`;
+  $('dyn').innerHTML=h;
+  if($('dil')){$('dil').value=S.dil;$('dil').oninput=e=>{S.dil=+e.target.value;update();};}
+  if($('qtd')){$('qtd').oninput=e=>{S.qtd=Math.max(1,Math.min(100,parseInt(e.target.value)||1));sug();update();};
+    $('vs').oninput=e=>{S.vs=Math.max(0,parseFloat(e.target.value)||0);S.touched=true;update();};sug();}
+  $('dose').oninput=e=>{S.dose=Math.max(0,parseFloat(e.target.value)||0);update();};
+  update();
+}
+function sug(){
+  const a=cur().ap,vA=S.qtd*a.v,alvos=[100,250].concat(vA>100?[500,1000]:[]);
+  const ok=alvos.filter(x=>vA<x).map(x=>({x,add:x-vA}));
+  $('sug').innerHTML=ok.length?ok.map(o=>`<button type="button" data-v="${o.add}">Bolsa de ${o.x} mL: adicionar ${nf(o.add,1)} mL</button>`).join(''):'<span class="mut">Volume acima de 1000 mL. Adapte conforme o protocolo.</span>';
+  $('sug').querySelectorAll('button').forEach(b=>b.onclick=()=>{S.vs=+b.dataset.v;S.touched=true;$('vs').value=S.vs;update();});
+  if(!S.touched&&ok.length){S.vs=ok[0].add;$('vs').value=S.vs;}
+}
+
+function update(){
+  const {d,mu,conc,desc}=context(),p=peso();
+  const needP=kgOf(d.u)||(d.at&&d.at.u.includes('kg'));
+  // vazão
+  if(conc<=0){$('vaz').textContent='—';$('status').innerHTML='<span class="err">Concentração inválida: verifique o volume de solvente.</span>';}
+  else if(needP&&!p){$('vaz').textContent='—';$('status').innerHTML='<span class="err">Informe o peso do paciente.</span>';}
+  else{
+    const v=vazao(S.dose,d.u,conc),s=status(S.dose,d.r);
+    $('vaz').textContent=nf(v,1)+' mL/h';
+    $('status').innerHTML=`<span class="tag ${s[0]}">${s[1]}</span>`;
+  }
+  // ataque
+  let ab='';
+  if(d.at&&conc>0&&(p||!d.at.u.includes('kg'))){
+    const a=ataque(d,conc,mu);
+    ab=`<label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="chkAt" style="width:auto" ${S.ataque?'checked':''}> Calcular dose de ataque (bolus / rápida)</label>`;
+    if(S.ataque)ab+=`<div class="info" style="margin-top:6px"><p><b>Ataque recomendado:</b> ${esc(a.rec)}</p></div><div class="warn">💉 ${esc(a.txt)}</div>`;
+  }
+  $('ataqueBox').innerHTML=ab;
+  if($('chkAt'))$('chkAt').onchange=e=>{S.ataque=e.target.checked;update();};
+  // lateral
+  $('side').innerHTML=`<strong>Informações da solução</strong>
+    <p><b>Solvente:</b> ${esc(d.s)}</p><p><b>Preparo:</b> ${esc(desc)}</p>
+    <p><b>Faixa usual:</b> ${d.r[0]} a ${d.r[1]} ${esc(d.u)}</p>
+    <p><b>Concentração:</b> ${nf(conc,2)} ${mu}/mL</p>
+    <p class="mut">Peso usado: ${kgOf(d.u)?(p?nf(p,1)+' kg':'não informado'):'não se aplica'}</p>
+    ${d.f?'<div class="warn">☀️ Fotossensível: proteger da luz.</div>':''}`;
+}
+
+/* ===== Plano terapêutico ===== */
+function addItem(){
+  const {d,mu,conc,desc}=context();
+  if(conc<=0||(kgOf(d.u)&&!peso()))return;
+  const a=S.ataque?ataque(d,conc,mu):null;
+  plan.push({id:++uid,cat:S.cat,droga:S.drug,dose:S.dose,unid:d.u,conc,mu,vazao:vazao(S.dose,d.u,conc),preparo:desc,ataque:a?a.txt:null,r:d.r});
+  renderPlan();
+}
+const doseFromVaz=it=>(it.vazao*it.conc)/((kgOf(it.unid)?peso()||1:1)*(minOf(it.unid)?60:1));
+function renderPlan(){
+  const pn=$('pNome').value.trim()||'Paciente não identificado';
+  $('ident').textContent=`${pn} · ${$('pIdade').value||'—'} anos · ${peso()||'—'} kg · ${$('pAlt').value||'—'} cm`;
+  if(!plan.length){$('plan').innerHTML='<p class="mut">Nenhuma droga no plano. Configure uma infusão acima e clique em “Adicionar ao plano terapêutico”.</p>';return;}
+  let h='';
+  ORDEM.forEach(c=>{
+    const its=plan.filter(i=>i.cat===c);if(!its.length)return;
+    h+=`<h3>${esc(c)}</h3>`;
+    its.forEach(it=>{
+      const s=status(it.dose,it.r);
+      h+=`<div class="item" data-id="${it.id}">
+        <div class="top"><div><h4>${esc(it.droga)}</h4>
+          <div class="mut">${esc(it.preparo)} · ${nf(it.conc,2)} ${it.mu}/mL</div>
+          <div>Dose programada: <b id="ds${it.id}">${nf(it.dose,2)}</b> ${esc(it.unid)} <span class="mut">(faixa ${it.r[0]} a ${it.r[1]})</span> <span class="tag ${s[0]}" id="st${it.id}">${s[1]}</span></div></div>
+          <button class="btn del" data-id="${it.id}">Excluir</button></div>
+        <div>Vazão: <b style="font-size:1.4rem;color:var(--acc)" id="vz${it.id}">${nf(it.vazao,1)} mL/h</b></div>
+        <input type="range" min="0" max="${Math.max(100,Math.round(it.vazao*2))}" step="0.1" value="${it.vazao}" data-id="${it.id}" aria-label="Vazão de ${esc(it.droga)} em mL/h">
+        ${it.ataque?`<div class="warn">💉 ${esc(it.ataque)}</div>`:''}
+      </div>`;
+    });
+  });
+  $('plan').innerHTML=h;
+  $('plan').querySelectorAll('input[type=range]').forEach(r=>r.oninput=()=>{
+    const it=plan.find(i=>i.id==r.dataset.id);it.vazao=parseFloat(r.value);it.dose=doseFromVaz(it);
+    const s=status(it.dose,it.r);
+    $('vz'+it.id).textContent=nf(it.vazao,1)+' mL/h';$('ds'+it.id).textContent=nf(it.dose,2);
+    $('st'+it.id).className='tag '+s[0];$('st'+it.id).textContent=s[1];
+  });
+  $('plan').querySelectorAll('.del').forEach(b=>b.onclick=()=>{plan=plan.filter(i=>i.id!=b.dataset.id);renderPlan();});
+}
+
+/* ===== Eventos ===== */
+function setMode(plano){
+  S.plano=plano;
+  $('tRef').setAttribute('aria-selected',!plano);$('tPlan').setAttribute('aria-selected',plano);
+  $('ficha').hidden=!plano;$('planPanel').hidden=!plano;$('add').hidden=!plano;
+  if(plano)renderPlan();
+}
+function setPrep(p){S.prep=p;$('mPad').setAttribute('aria-pressed',p==='padrao');$('mCus').setAttribute('aria-pressed',p==='custom');build();}
+$('tRef').onclick=()=>setMode(false);$('tPlan').onclick=()=>setMode(true);
+$('mPad').onclick=()=>setPrep('padrao');$('mCus').onclick=()=>setPrep('custom');
+$('cat').onchange=e=>{S.cat=e.target.value;S.drug='';fillSelects();resetDrug();};
+$('drug').onchange=e=>{S.drug=e.target.value;resetDrug();};
+$('peso').oninput=()=>{plan.forEach(it=>{it.dose=doseFromVaz(it);});update();if(S.plano)renderPlan();};
+['pNome','pIdade','pAlt'].forEach(id=>$(id).oninput=renderPlan);
+$('add').onclick=addItem;
+$('clear').onclick=()=>{if(!plan.length||confirm('Limpar o plano e a ficha do paciente?')){plan=[];['pNome','pIdade','pAlt'].forEach(id=>$(id).value='');$('peso').value=70;update();renderPlan();}};
+
+fillSelects();resetDrug();
+</script>
+</body>
+</html>
