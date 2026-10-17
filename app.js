@@ -1,6 +1,19 @@
-/* Controlador de Interface do Usuário */
+/* Controlador de Interface do Usuário - Dual Cards + Slider de Titulação */
 const $ = id => document.getElementById(id);
-const S = { plano: false, cat: ORDEM[0], drug: '', prep: 'padrao', dil: 0, qtd: 1, vf: 250, dose: 0, ataque: false };
+
+const S = {
+  plano: false,
+  cat: ORDEM[0],
+  drug: '',
+  prep: 'padrao',
+  dil: 0,
+  qtd: 1,
+  vf: 250,
+  dose: 0,
+  rate: 0,
+  lastEdited: 'dose',
+  ataque: false
+};
 let plan = [], uid = 0;
 
 const peso = () => { const w = CalcCore.weightState($('peso').value); return w.valid ? w.value : null; };
@@ -33,6 +46,7 @@ function context() {
 }
 
 const vazao = (dose, unid, conc) => CalcCore.infusionRate(dose, unid, conc, $('peso').value);
+const doseReversa = (rate, unid, conc) => CalcCore.doseFromRate(rate, conc, unid, $('peso').value);
 
 function ataque(d, conc, mu) {
   if (!d.at) return null;
@@ -59,7 +73,9 @@ function defaultFinalVolume(d) {
 
 function resetDrug() {
   const d = cur();
-  S.dil = 0; S.qtd = 1; S.ataque = false; S.dose = d.r[0];
+  S.dil = 0; S.qtd = 1; S.ataque = false;
+  S.dose = d.r[0];
+  S.lastEdited = 'dose';
   S.vf = defaultFinalVolume(d);
   build();
 }
@@ -74,23 +90,100 @@ function build() {
       <label>Sugestões de volume final</label><div class="sug" id="sug"></div>
       <label for="vf">Volume final da solução (mL, incluindo o fármaco)</label><input id="vf" type="number" min="0.1" max="2000" step="0.1" value="${S.vf}">`;
   }
-  h += `<label for="dose">Dose de manutenção desejada (${esc(d.u)})</label><input id="dose" type="number" inputmode="decimal" min="0" step="any" value="${S.dose}">
-    <div class="sug" style="margin-top:4px">
-      <button type="button" id="btnDoseMin">Dose mín: ${nfClean(d.r[0])} ${esc(d.u)}</button>
-      <button type="button" id="btnDoseMax">Dose máx: ${nfClean(d.r[1])} ${esc(d.u)}</button>
+
+  // Dual Cards com Slider Integrado na Caixa da Bomba (BIC)
+  h += `<div class="dual-cards">
+      <div class="calc-card active-source" id="cardDose">
+        <div>
+          <div class="card-head">
+            <span class="card-title">Dose Clínica</span>
+            <span class="mode-badge" id="badgeDose">Dose Alvo</span>
+          </div>
+          <div class="input-big-wrap">
+            <input id="dose" type="number" inputmode="decimal" min="0" step="any" value="${S.dose}" aria-label="Dose clínica">
+            <span class="unit-label">${esc(d.u)}</span>
+          </div>
+        </div>
+        <div class="card-foot">
+          <div id="status"></div>
+          <div class="quick-chips">
+            <button type="button" id="btnDoseMin">Mín: ${nfClean(d.r[0])}</button>
+            <button type="button" id="btnDoseMax">Máx: ${nfClean(d.r[1])}</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="swap-divider">
+        <div class="swap-circle" title="Sincronização automática bidirecional">⇄</div>
+      </div>
+
+      <div class="calc-card computed-target" id="cardRate">
+        <div>
+          <div class="card-head">
+            <span class="card-title">Vazão na Bomba (BIC)</span>
+            <span class="mode-badge" id="badgeRate">Vazão Calculada</span>
+          </div>
+          <div class="input-big-wrap">
+            <input id="rateInput" type="number" inputmode="decimal" min="0" step="0.1" value="" aria-label="Vazão em mL/h">
+            <span class="unit-label">mL/h</span>
+          </div>
+        </div>
+        <div class="card-foot">
+          <div class="range-wrap">
+            <input id="rateSlider" type="range" min="0" max="100" step="0.5" value="0" aria-label="Deslizar vazão na bomba">
+            <div class="range-labels">
+              <span>0 mL/h</span>
+              <span id="sliderUsualHint">Faixa usual: —</span>
+              <span id="sliderMaxLabel">100 mL/h</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>`;
+
   $('dyn').innerHTML = h;
 
-  if ($('dil')) { $('dil').value = S.dil; $('dil').oninput = e => { S.dil = +e.target.value; update(); }; }
+  if ($('dil')) {$('dil').value = S.dil;
+    $('dil').oninput = e => { S.dil = +e.target.value; update('context'); };
+  }
   if ($('qtd')) {
-    $('qtd').oninput = e => { S.qtd = CalcCore.number(e.target.value); sug(); update(); };$('vf').oninput = e => { S.vf = CalcCore.number(e.target.value); update(); };
+    $('qtd').oninput = e => { S.qtd = CalcCore.number(e.target.value); sug(); update('context'); };$('vf').oninput = e => { S.vf = CalcCore.number(e.target.value); update('context'); };
     sug();
   }
-  $('dose').oninput = e => { S.dose = CalcCore.number(e.target.value); update(); };
-  if ($('btnDoseMin')) $('btnDoseMin').onclick = () => { S.dose = d.r[0];$('dose').value = S.dose; update(); };
-  if ($('btnDoseMax')) $('btnDoseMax').onclick = () => { S.dose = d.r[1];$('dose').value = S.dose; update(); };
 
-  update();
+  $('dose').oninput = e => {
+    S.dose = CalcCore.number(e.target.value);
+    S.lastEdited = 'dose';
+    update('dose');
+  };
+
+  $('rateInput').oninput = e => {
+    S.rate = CalcCore.number(e.target.value);
+    S.lastEdited = 'rate';
+    update('rate');
+  };
+
+  // Evento do Slider de Vazão
+  $('rateSlider').oninput = e => {
+    S.rate = CalcCore.number(e.target.value);
+    S.lastEdited = 'rate';
+    if ($('rateInput'))$('rateInput').value = S.rate;
+    update('slider');
+  };
+
+  $('btnDoseMin').onclick = () => {
+    S.dose = d.r[0]; S.lastEdited = 'dose';
+    $('dose').value = S.dose;
+    update('dose');
+  };
+
+  $('btnDoseMax').onclick = () => {
+    S.dose = d.r[1]; S.lastEdited = 'dose';
+    $('dose').value = S.dose;
+    update('dose');
+  };
+
+  update('dose');
 }
 
 function sug() {
@@ -98,31 +191,121 @@ function sug() {
   $('sug').innerHTML = targets.length
     ? targets.map(v => `<button type="button" data-v="${v}">Volume final: ${nf(v, 1)} mL</button>`).join('')
     : '<span class="mut">Defina um volume final maior que o volume do fármaco.</span>';
-  $('sug').querySelectorAll('button').forEach(b => b.onclick = () => { S.vf = +b.dataset.v; $('vf').value = S.vf; update(); });
+  $('sug').querySelectorAll('button').forEach(b => b.onclick = () => { S.vf = +b.dataset.v; $('vf').value = S.vf; update('context'); });
 }
 
-function update() {
-  const { d, mu, conc, desc, recipe } = context(), p = peso(), dose = CalcCore.number(S.dose);
+function updateCardVisuals() {
+  const cDose = $('cardDose'), cRate =$('cardRate');
+  const bDose = $('badgeDose'), bRate =$('badgeRate');
+  if (!cDose || !cRate) return;
+
+  if (S.lastEdited === 'rate') {
+    cRate.className = 'calc-card active-source';
+    cDose.className = 'calc-card computed-target';
+    bRate.textContent = 'Fixado na BIC';
+    bDose.textContent = 'Dose Calculada';
+  } else {
+    cDose.className = 'calc-card active-source';
+    cRate.className = 'calc-card computed-target';
+    bDose.textContent = 'Dose Alvo';
+    bRate.textContent = 'Vazão Calculada';
+  }
+}
+
+/* Configura dinamicamente o limite e o passo do Slider conforme a droga, peso e concentração */
+function syncSliderBounds(d, conc, currentRate, canCalc) {
+  const slider = $('rateSlider');
+  if (!slider) return;
+  slider.disabled = !canCalc;
+  if (!canCalc) {
+    $('sliderUsualHint').textContent = 'Faixa usual: —';
+    return;
+  }
+
+  const rMin = vazao(d.r[0], d.u, conc);
+  const rMax = vazao(d.r[1], d.u, conc);
+
+  // Teto inteligente: 1.5x a vazão máxima usual (arredondado para múltiplo de 5)
+  let maxLimit = Number.isFinite(rMax) && rMax > 0 ? Math.ceil((rMax * 1.5) / 5) * 5 : 100;
+  maxLimit = Math.max(10, maxLimit);
+
+  // Se o médico digitou manualmente uma vazão maior que o teto do slider, expande a escala
+  if (Number.isFinite(currentRate) && currentRate > maxLimit) {
+    maxLimit = Math.ceil(currentRate / 10) * 10;
+  }
+
+  // Passo fino para drogas de baixa vazão e passo de 0.5 mL/h para vazões maiores
+  const step = maxLimit <= 20 ? 0.1 : 0.5;
+
+  slider.max = maxLimit;
+  slider.step = step;
+  if (document.activeElement !== slider) {
+    slider.value = Number.isFinite(currentRate) && currentRate >= 0 ? currentRate : 0;
+  }
+
+  $('sliderMaxLabel').textContent = `${nfClean(maxLimit, 0)} mL/h`;
+  if (Number.isFinite(rMin) && Number.isFinite(rMax)) {
+    $('sliderUsualHint').textContent = `Usual: ${nf(rMin, 1)}–${nf(rMax, 1)} mL/h`;
+  }
+}
+
+function update(source = 'context') {
+  const { d, mu, conc, desc, recipe } = context(), p = peso();
   const weightValid = CalcCore.weightState($('peso').value).valid;
   const drugVol = d.ap.v * (S.prep === 'custom' ? S.qtd : 1);
   const recipeValid = Number.isFinite(conc) && conc > 0 && Number.isFinite(recipe.finalVolume) && recipe.finalVolume > 0 && recipe.finalVolume >= drugVol;
-  const doseValid = Number.isFinite(dose) && dose >= 0;
   const needP = kgOf(d.u);
-  let error = '';
+  const canCalc = recipeValid && (!needP || weightValid);
 
+  const effectiveSource = source === 'context' ? S.lastEdited : (source === 'slider' ? 'rate' : source);
+  updateCardVisuals();
+
+  if (effectiveSource === 'rate') {
+    const rVal = CalcCore.number(S.rate);
+    if (canCalc && Number.isFinite(rVal) && rVal >= 0) {
+      S.dose = doseReversa(rVal, d.u, conc);
+      if ($('dose') && document.activeElement !== $('dose')) {$('dose').value = Number.isFinite(S.dose) ? Number(S.dose.toFixed(3)) : '';
+      }
+    } else {
+      S.dose = NaN;
+      if ($('dose') && document.activeElement !== $('dose'))$('dose').value = '';
+    }
+  } else {
+    const dVal = CalcCore.number(S.dose);
+    if (canCalc && Number.isFinite(dVal) && dVal >= 0) {
+      S.rate = vazao(dVal, d.u, conc);
+      if ($('rateInput') && document.activeElement !== $('rateInput')) {$('rateInput').value = Number.isFinite(S.rate) ? Number(S.rate.toFixed(1)) : '';
+      }
+    } else {
+      S.rate = NaN;
+      if ($('rateInput') && document.activeElement !== $('rateInput'))$('rateInput').value = '';
+    }
+  }
+
+  const dose = CalcCore.number(S.dose);
+  const rate = CalcCore.number(S.rate);
+  syncSliderBounds(d, conc, rate, canCalc);
+
+  const doseValid = Number.isFinite(dose) && dose >= 0;
+  const rateValid = Number.isFinite(rate) && rate >= 0;
+
+  let error = '';
   if (!recipeValid) error = 'Preparo inválido: volume final deve ser positivo e superior ao volume do fármaco.';
   else if (needP && !weightValid) error = 'Informe um peso válido (1 a 300 kg) para o cálculo.';
-  else if (!doseValid) error = 'Informe uma dose numérica válida.';
-
-  const rate = recipeValid && doseValid ? vazao(dose, d.u, conc) : NaN;
+  else if (!doseValid || !rateValid) error = 'Informe um valor numérico válido.';
 
   if (error) {
-    $('vaz').textContent = '—';$('status').innerHTML = `<span class="err">${esc(error)}</span>`;
-    $('calcDetails').innerHTML = 'Cálculo suspenso até o ajuste dos dados.';
+    if ($('vaz')) $('vaz').textContent = '';$('status').innerHTML = `<span class="err" style="font-size:0.82rem">${esc(error)}</span>`;
+    $('calcDetails').innerHTML = `<span class="err">${esc(error)}</span>`;
   } else {
+    if ($('vaz'))$('vaz').hidden = true;
     const s = status(dose, d.r);
-    $('vaz').textContent = nf(rate, 1) + ' mL/h';$('status').innerHTML = `<span class="tag ${s[0]}">${s[1]}</span>`;
-    $('calcDetails').innerHTML = `Dose ${nfClean(dose, 3)} ${esc(d.u)} ÷ conc. ${nfClean(conc, 3)} ${esc(mu)}/mL${kgOf(d.u) ? ` × peso ${nf(p, 1)} kg` : ''}${minOf(d.u) ? ' × 60 min/h' : ''} = <b>${nf(rate, 1)} mL/h</b>.`;
+    $('status').innerHTML = `<span class="tag ${s[0]}">${s[1]}</span>`;
+    if (S.lastEdited === 'rate') {
+      $('calcDetails').innerHTML = `<b>Auditoria (BIC → Dose):</b> ${nf(rate, 1)} mL/h × ${nfClean(conc, 2)} ${esc(mu)}/mL${kgOf(d.u) ? ` ÷ ${nf(p, 1)} kg` : ''}${minOf(d.u) ? ' ÷ 60 min/h' : ''} = <b>${nfClean(dose, 3)} ${esc(d.u)}</b>`;
+    } else {
+      $('calcDetails').innerHTML = `<b>Auditoria (Dose → BIC):</b> ${nfClean(dose, 3)} ${esc(d.u)} ÷ ${nfClean(conc, 2)} ${esc(mu)}/mL${kgOf(d.u) ? ` × ${nf(p, 1)} kg` : ''}${minOf(d.u) ? ' × 60 min/h' : ''} = <b>${nf(rate, 1)} mL/h</b>`;
+    }
   }
 
   let ab = '';
@@ -136,9 +319,8 @@ function update() {
     }
   }
   $('ataqueBox').innerHTML = ab;
-  if ($('chkAt'))$('chkAt').onchange = e => { S.ataque = e.target.checked; update(); };
+  if ($('chkAt'))$('chkAt').onchange = e => { S.ataque = e.target.checked; update('context'); };
 
-  // Aba lateral com o formato estrito
   $('side').innerHTML = `<strong>Informações da solução</strong>
     <p><b>Solvente:</b> ${esc(d.s)}</p>
     <p><b>Preparo:</b> <b>${esc(desc)}</b></p>
@@ -153,14 +335,13 @@ function update() {
 
 /* Copiar Prescrição */
 $('btnCopy').onclick = () => {
-  const { d, desc, recipe } = context(), dose = CalcCore.number(S.dose), p = peso();
-  const rate = vazao(dose, d.u, recipe.concentration);
-  if (!Number.isFinite(rate)) { alert('Preencha os dados corretamente para copiar a prescrição.'); return; }
+  const { d, desc, recipe } = context(), dose = CalcCore.number(S.dose), rate = CalcCore.number(S.rate), p = peso();
+  if (!Number.isFinite(rate) || !Number.isFinite(dose)) { alert('Preencha os dados corretamente para copiar a prescrição.'); return; }
   const texto = `${d.name.toUpperCase()}
 • Preparo: ${desc} (${d.s})
 • Volume Final: ${nfClean(recipe.finalVolume)} mL (Concentração: ${nfClean(recipe.concentration, 2)} ${baseUnit(d.u)}/mL)
 • Programação na BIC: ${nf(rate, 1)} mL/h
-• Dose Meta: ${nfClean(dose, 3)} ${d.u}${kgOf(d.u) ? ` (Peso: ${nf(p, 1)} kg)` : ''}`;
+• Dose Efetiva: ${nfClean(dose, 3)} ${d.u}${kgOf(d.u) ? ` (Peso: ${nf(p, 1)} kg)` : ''}`;
   navigator.clipboard.writeText(texto).then(() => {
     const b = $('btnCopy'); const old = b.textContent;
     b.textContent = '✓ Prescrição copiada!';
@@ -172,12 +353,12 @@ $('btnCopy').onclick = () => {
 function addItem() {
   const { d, mu, conc, desc, recipe } = context(), weightValid = CalcCore.weightState($('peso').value).valid;
   const needP = CalcCore.needsWeight(d.u, S.ataque && d.at ? d.at.u : '');
-  const dose = CalcCore.number(S.dose);
+  const dose = CalcCore.number(S.dose), rate = CalcCore.number(S.rate);
   if (!Number.isFinite(conc) || conc <= 0 || !Number.isFinite(recipe.finalVolume) || recipe.finalVolume <= 0 || !Number.isFinite(dose) || dose < 0 || (needP && !weightValid)) return;
   const a = S.ataque ? ataque(d, conc, mu) : null;
   plan.push({
     id: ++uid, cat: S.cat, droga: S.drug, dose, unid: d.u, conc, mu,
-    vazao: vazao(dose, d.u, conc), preparo: desc, volumeFinal: recipe.finalVolume,
+    vazao: rate, preparo: desc, volumeFinal: recipe.finalVolume,
     ataqueMeta: a && d.at ? { v: d.at.v, u: d.at.u, t: d.at.t } : null, r: [...d.r]
   });
   renderPlan();
@@ -185,7 +366,18 @@ function addItem() {
 
 function renderPlan() {
   const pn = $('pNome').value.trim() || 'Paciente não identificado';
-  $('ident').textContent = `${pn} · ${$('pIdade').value || '—'} anos · ${peso() || '—'} kg · ${$('pAlt').value || '—'} cm`;
+  const idVal = $('pIdade').value ? `${esc($('pIdade').value)} anos` : '—';
+  const pVal = peso() ? `${nf(peso(), 1)} kg` : '—';
+  const altVal = $('pAlt').value ? `${esc($('pAlt').value)} cm` : '—';
+
+  $('ident').innerHTML = `
+    <div class="patient-name">${esc(pn)}</div>
+    <div class="patient-metrics">
+      <span class="metric-pill">Peso: <b>${pVal}</b></span>
+      <span class="metric-pill">Idade: <b>${idVal}</b></span>
+      <span class="metric-pill">Altura: <b>${altVal}</b></span>
+    </div>`;
+
   if (!plan.length) {
     $('plan').innerHTML = '<p class="mut">Nenhuma droga no plano. Configure a infusão acima e clique em “Adicionar ao plano terapêutico”.</p>';
     return;
@@ -196,34 +388,87 @@ function renderPlan() {
     if (!its.length) return;
     h += `<h3>${esc(c)}</h3>`;
     its.forEach(it => {
-      const s = status(it.dose, it.r), formula = CalcCore.infusionRate(it.dose, it.unid, it.conc, $('peso').value);
+      const s = status(it.dose, it.r);
+      const rMaxPlan = vazao(it.r[1], it.unid, it.conc);
+      const maxSliderPlan = Number.isFinite(rMaxPlan) && rMaxPlan > 0 ? Math.max(10, Math.ceil((rMaxPlan * 1.5) / 5) * 5, Math.ceil((it.vazao || 0) / 10) * 10) : 100;
+      const stepPlan = maxSliderPlan <= 20 ? 0.1 : 0.5;
+
       h += `<div class="item" data-id="${it.id}">
         <div class="top">
           <div>
             <h4>${esc(it.droga)}</h4>
             <div class="mut"><b>Preparo:</b> ${esc(it.preparo)} · Volume final: ${nfClean(it.volumeFinal)} mL · ${nfClean(it.conc, 2)} ${it.mu}/mL</div>
-            <div>Dose prescrita: <b id="ds${it.id}">${nfClean(it.dose, 3)}</b> ${esc(it.unid)} <span class="tag ${s[0]}" id="st${it.id}">${s[1]}</span></div>
           </div>
-          <button class="btn del" data-id="${it.id}">Excluir</button>
+          <button class="btn del" data-id="${it.id}" type="button">Excluir</button>
         </div>
-        <div style="margin-top:6px">Vazão calculada: <b style="font-size:1.3rem;color:var(--acc)" id="vz${it.id}">${Number.isFinite(formula) ? nf(formula, 1) + ' mL/h' : '— (verifique peso)'}</b></div>
-        <label for="rate${it.id}">Ajustar vazão na BIC (mL/h)</label>
-        <div style="display:flex;gap:6px">
-          <input id="rate${it.id}" type="number" min="0" step="0.1" value="${Number.isFinite(it.vazao) ? it.vazao : ''}" style="max-width:140px">
-          <button class="btn applyRate" data-id="${it.id}" type="button">Recalcular dose a partir da vazão</button>
+        <div class="dual-cards" style="margin-top:10px">
+          <div class="calc-card active-source">
+            <div class="card-head"><span class="card-title">Dose</span></div>
+            <div class="input-big-wrap" style="margin-bottom:0">
+              <input id="pDose${it.id}" class="plan-dose" data-id="${it.id}" type="number" inputmode="decimal" min="0" step="any" value="${Number.isFinite(it.dose) ? Number(it.dose.toFixed(3)) : ''}">
+              <span class="unit-label">${esc(it.unid)}</span>
+            </div>
+          </div>
+          <div class="swap-divider"><div class="swap-circle">⇄</div></div>
+          <div class="calc-card computed-target">
+            <div class="card-head"><span class="card-title">Vazão na BIC</span></div>
+            <div class="input-big-wrap" style="margin-bottom:6px">
+              <input id="pRate${it.id}" class="plan-rate" data-id="${it.id}" type="number" inputmode="decimal" min="0" step="0.1" value="${Number.isFinite(it.vazao) ? Number(it.vazao.toFixed(1)) : ''}">
+              <span class="unit-label">mL/h</span>
+            </div>
+            <div class="range-wrap">
+              <input id="pSlider${it.id}" class="plan-slider" data-id="${it.id}" type="range" min="0" max="${maxSliderPlan}" step="${stepPlan}" value="${Number.isFinite(it.vazao) ? it.vazao : 0}">
+            </div>
+          </div>
         </div>
+        <div style="margin-top:8px"><span class="tag ${s[0]}" id="st${it.id}">${s[1]}</span> <span class="mut">(faixa: ${nfClean(it.r[0])} a ${nfClean(it.r[1])} ${esc(it.unid)})</span></div>
       </div>`;
     });
   });
   $('plan').innerHTML = h;
 
-  $('plan').querySelectorAll('.applyRate').forEach(b => b.onclick = () => {
-    const it = plan.find(i => i.id == b.dataset.id), rate = CalcCore.number($('rate' + it.id).value);
-    if (!Number.isFinite(rate) || rate < 0) { alert('Informe uma vazão válida.'); return; }
-    const newDose = CalcCore.doseFromRate(rate, it.conc, it.unid, $('peso').value);
-    if (!Number.isFinite(newDose)) { alert('Não foi possível calcular: informe um peso válido.'); return; }
-    it.vazao = rate; it.dose = newDose;
-    renderPlan();
+  $('plan').querySelectorAll('.plan-dose').forEach(inp => inp.oninput = e => {
+    const it = plan.find(i => i.id == e.target.dataset.id);
+    const val = CalcCore.number(e.target.value);
+    it.dose = val;
+    it.vazao = CalcCore.infusionRate(val, it.unid, it.conc, $('peso').value);
+    const rInp = $('pRate' + it.id), sInp =$('pSlider' + it.id);
+    if (rInp) rInp.value = Number.isFinite(it.vazao) ? Number(it.vazao.toFixed(1)) : '';
+    if (sInp && Number.isFinite(it.vazao)) {
+      if (it.vazao > Number(sInp.max)) sInp.max = Math.ceil(it.vazao / 10) * 10;
+      sInp.value = it.vazao;
+    }
+    const st = $('st' + it.id);
+    if (st && Number.isFinite(val)) {
+      const s = status(val, it.r);
+      st.className = `tag ${s[0]}`; st.textContent = s[1];
+    }
+  });
+
+  const syncFromPlanRate = (id, val, sourceType) => {
+    const it = plan.find(i => i.id == id);
+    it.vazao = val;
+    it.dose = CalcCore.doseFromRate(val, it.conc, it.unid, $('peso').value);
+    const dInp = $('pDose' + it.id), rInp = $('pRate' + it.id), sInp =$('pSlider' + it.id);
+    if (dInp) dInp.value = Number.isFinite(it.dose) ? Number(it.dose.toFixed(3)) : '';
+    if (sourceType === 'slider' && rInp) rInp.value = Number.isFinite(val) ? Number(val.toFixed(1)) : '';
+    if (sourceType === 'input' && sInp && Number.isFinite(val)) {
+      if (val > Number(sInp.max)) sInp.max = Math.ceil(val / 10) * 10;
+      sInp.value = val;
+    }
+    const st = $('st' + it.id);
+    if (st && Number.isFinite(it.dose)) {
+      const s = status(it.dose, it.r);
+      st.className = `tag ${s[0]}`; st.textContent = s[1];
+    }
+  };
+
+  $('plan').querySelectorAll('.plan-rate').forEach(inp => inp.oninput = e => {
+    syncFromPlanRate(e.target.dataset.id, CalcCore.number(e.target.value), 'input');
+  });
+
+  $('plan').querySelectorAll('.plan-slider').forEach(inp => inp.oninput = e => {
+    syncFromPlanRate(e.target.dataset.id, CalcCore.number(e.target.value), 'slider');
   });
 
   $('plan').querySelectorAll('.del').forEach(b => b.onclick = () => {
@@ -254,7 +499,7 @@ $('mPad').onclick = () => setPrep('padrao');$('mCus').onclick = () => setPrep('c
 $('cat').onchange = e => { S.cat = e.target.value; S.drug = ''; fillSelects(); resetDrug(); };
 $('drug').onchange = e => { S.drug = e.target.value; resetDrug(); };$('peso').oninput = () => {
   plan.forEach(it => { it.vazao = CalcCore.infusionRate(it.dose, it.unid, it.conc, $('peso').value); });
-  update();
+  update('context');
   if (S.plano) renderPlan();
 };
 ['pNome', 'pIdade', 'pAlt'].forEach(id => $(id).oninput = renderPlan);$('add').onclick = addItem;
@@ -263,12 +508,11 @@ $('clear').onclick = () => {
     plan = [];
     ['pNome', 'pIdade', 'pAlt'].forEach(id => $(id).value = '');$('peso').value = '70';
     S.ataque = false;
-    update();
+    update('context');
     renderPlan();
   }
 };
 
-// Registro do Service Worker (Offline PWA)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(err => {
